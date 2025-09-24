@@ -1,0 +1,1256 @@
+/* Hunt Royale Authentic Game Interface Styles - Cleaned Up */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.hunt-royale-simulator {
+    font-family: 'Arial', 'Helvetica', sans-serif;
+    background: #1a1a1a;
+    color: #ffffff;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* Dark game background */
+.hunt-royale-simulator::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to bottom, #0a0a0a, #1a1a1a);
+    z-index: -1;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.header h1 {
+    font-size: 2.5em;
+    font-weight: 700;
+    color: #ffd700;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+}
+
+.header p {
+    font-size: 1em;
+    color: #cccccc;
+    font-weight: 400;
+}
+
+.power-rating {
+    margin-top: 15px;
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
+    border-radius: 20px;
+    display: inline-block;
+    border: 2px solid #ffd700;
+}
+
+.power-rating span {
+    color: #ffffff;
+    font-size: 1em;
+}
+
+.power-rating strong {
+    color: #ffd700;
+    font-size: 1.2em;
+}
+
+.main-layout {
+    display: grid;
+    grid-template-columns: 400px 1fr 300px;
+    gap: 20px;
+    min-height: calc(100vh - 180px);
+}
+
+/* Game card panel style */
+.panel {
+    background: #2a2a2a;
+    border-radius: 15px;
+    padding: 20px;
+    border: 2px solid #3a3a3a;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    position: relative;
+}
+
+.panel::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #ffd700, #ffed4e);
+    border-radius: 15px;
+    opacity: 0;
+    z-index: -1;
+    transition: opacity 0.3s ease;
+}
+
+.panel:hover::before {
+    opacity: 0.1;
+}
+
+.section-title {
+    font-size: 1.2em;
+    font-weight: 700;
+    color: #ffd700;
+    margin-bottom: 15px;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Power Stone Items */
+.stone-item {
+    background: #1a1a1a;
+    border: 2px solid #444444;
+    border-radius: 8px;
+    padding: 8px;
+    cursor: grab;
+    text-align: center;
+    font-size: 0.75em;
+    transition: all 0.2s ease;
+}
+
+.stone-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+    border-color: var(--stone-color);
+}
+
+.stone-name {
+    font-weight: 700;
+    color: var(--stone-color);
+}
+
+.stone-level {
+    font-size: 0.9em;
+    color: #cccccc;
+    margin: 2px 0;
+}
+
+.stone-bonus {
+    font-size: 0.9em;
+    color: #00ff00;
+    font-weight: 600;
+}
+
+/* Stone Library Organized */
+.stone-library-organized {
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.stone-type-section {
+    margin-bottom: 15px;
+    background: linear-gradient(135deg, rgba(26, 31, 46, 0.3), rgba(37, 43, 63, 0.3));
+    border-radius: 10px;
+    padding: 10px;
+    border: 1px solid #3a4556;
+}
+
+.stone-type-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    background: #2a2a2a;
+    margin-bottom: 10px;
+    transition: background 0.2s ease;
+}
+
+.stone-type-header:hover {
+    background: #333333;
+}
+
+.stone-type-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stone-type-name {
+    color: #ffd700;
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.stone-type-name-super {
+  color: #ffd700;
+}
+
+.stone-type-name-mega {
+  color: #ffcc00;
+}
+
+.stone-type-count {
+    color: #cccccc;
+    font-size: 0.8em;
+}
+
+.stone-levels-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 8px;
+    padding: 12px;
+    background: #1e1e1e;
+}
+
+/* Full-width layout for regular stone levels (1-7) */
+.stone-levels-grid.stone-levels-regular {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 8px 12px 8px; /* tighter padding to maximize content width */
+}
+
+.stone-levels-grid.stone-levels-regular .stone-item {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* defensive left, offensive right */
+    grid-auto-rows: auto;
+    row-gap: 6px;
+    align-items: center;
+    padding: 10px 12px;
+    text-align: left;
+    position: relative;
+}
+
+/* Title spans both columns */
+.stone-row-title {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+/* Place rows explicitly */
+.stone-levels-grid.stone-levels-regular .stone-defensive {
+    grid-column: 1;
+}
+
+.stone-levels-grid.stone-levels-regular .stone-offensive {
+    grid-column: 2;
+    justify-self: end;
+}
+
+/* Secondary offensive stays in right column under primary offensive */
+.stone-levels-grid.stone-levels-regular .stone-offensive.secondary {
+    grid-column: 2;
+}
+
+/* Stone Instruction */
+.stone-instruction {
+    color: #ffcd3c;
+    font-size: 0.9em;
+    text-align: center;
+    margin-bottom: 20px;
+    padding: 10px 15px;
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.1), rgba(255, 205, 60, 0.1));
+    border-radius: 10px;
+    border: 1px solid rgba(255, 107, 53, 0.3);
+    font-style: italic;
+}
+
+/* Controls */
+.controls {
+    text-align: center;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.btn {
+    background: linear-gradient(135deg, #ffd700, #ffed4e);
+    color: #1a1a1a;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(135deg, #ffed4e, #ffd700);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+/* Merge Mode Styles */
+.btn-active {
+  background: linear-gradient(135deg, #ff6b35, #ff8c69) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 15px rgba(255, 107, 53, 0.5) !important;
+}
+
+.btn-active:hover {
+  background: linear-gradient(135deg, #ff8c69, #ff6b35) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.6) !important;
+}
+
+.merge-instructions {
+  background: linear-gradient(135deg, rgba(255, 107, 53, 0.1), rgba(255, 205, 60, 0.1));
+  border: 2px solid rgba(255, 107, 53, 0.3);
+  border-radius: 10px;
+  padding: 15px;
+  margin: 15px 0;
+  text-align: center;
+}
+
+.merge-instructions p {
+  margin: 5px 0;
+  color: #ffcd3c;
+  font-weight: 500;
+}
+
+.merge-instructions strong {
+  color: #ffd700;
+  text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+}
+
+/* Stone selection states for merge mode */
+.stone-item.mergeable {
+  cursor: pointer;
+  border-color: #ffd700 !important;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  animation: mergeGlow 2s ease-in-out infinite alternate;
+}
+
+.stone-item.mergeable:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+  border-color: #ffed4e !important;
+}
+
+.stone-item.selected {
+  border-color: #00ff88 !important;
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.6) !important;
+  transform: scale(1.05);
+  animation: selectedPulse 1.5s ease-in-out infinite;
+}
+
+.merge-indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #ffd700;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6em;
+  font-weight: bold;
+  border: 1px solid #ffd700;
+}
+
+.stone-item.selected .merge-indicator {
+  background: rgba(0, 255, 136, 0.9);
+  color: #000000;
+  border-color: #00ff88;
+}
+
+/* Animations for merge mode */
+@keyframes mergeGlow {
+  0% {
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+  }
+}
+
+@keyframes selectedPulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(0, 255, 136, 0.8);
+  }
+}
+
+/* Disable dragging in merge mode */
+.stone-item:not([draggable="true"]) {
+  cursor: pointer;
+}
+
+/* Super stone styles (for future use) */
+.stone-item.super-stone {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 107, 53, 0.2));
+  border: 2px solid #ffd700;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+  position: relative;
+}
+
+.stone-item.super-stone::before {
+  content: '⭐';
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  font-size: 1.2em;
+  text-shadow: 0 0 5px rgba(255, 215, 0, 0.8);
+}
+
+/* Equipment Grid - Reorganized with defensive left, offensive right */
+.equipment-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 20px 300px; /* Increased horizontal gap from 20px to 60px for more space between columns */
+    margin: 30px auto;
+}
+
+/* Position gear score as a full-width row inside the equipment grid */
+.equipment-grid .gear-score-container {
+  grid-column: 1 / -1; /* span both columns */
+  justify-self: center; /* center the pill across grid width */
+}
+
+/* Equipment slot container - holds slot and controls */
+.equipment-slot-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.equipment-slot {
+    width: 90px;
+    height: 90px;
+    background: linear-gradient(135deg, #1a1f2e, #252b3f);
+    border: 2px solid #3a4556;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.equipment-slot::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.1), rgba(255, 205, 60, 0.1));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 2; /* ensure hover overlay stays above icon and content */
+}
+
+/* Generic icon layer under content for equipment slots */
+.equipment-slot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover; /* full cover */
+    opacity: 1; /* fully visible */
+    z-index: 1; /* place above slot background, below overlays */
+    pointer-events: none;
+}
+
+/* Left-side power stone socket bar inside equipment slots */
+.equipment-slot .power-socket-bar {
+    position: absolute;
+    top: 6px;
+    bottom: 26px;
+    left: 6px;
+    width: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 3; /* above slot background image and hover overlay */
+}
+
+.equipment-slot .power-socket {
+    width: 10px;
+    height: 16px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+}
+
+.equipment-slot .power-socket.filled {
+    background: linear-gradient(180deg, #ffd700, #ffae00);
+    border-color: rgba(255, 215, 0, 0.9);
+    box-shadow: 0 0 6px rgba(255, 215, 0, 0.6), inset 0 1px 2px rgba(0,0,0,0.6);
+}
+
+/* Filled socket colors by stone type */
+.equipment-slot .power-socket.filled.socket-rotten { background: linear-gradient(180deg, #a36227, #8B4513); border-color: #8B4513; box-shadow: 0 0 6px rgba(139, 69, 19, 0.6), inset 0 1px 2px rgba(0,0,0,0.6); }
+.equipment-slot .power-socket.filled.socket-red    { background: linear-gradient(180deg, #ff8a76, #e74c3c); border-color: #e74c3c; box-shadow: 0 0 6px rgba(231, 76, 60, 0.6), inset 0 1px 2px rgba(0,0,0,0.6); }
+.equipment-slot .power-socket.filled.socket-green  { background: linear-gradient(180deg, #55d48a, #27ae60); border-color: #27ae60; box-shadow: 0 0 6px rgba(39, 174, 96, 0.6), inset 0 1px 2px rgba(0,0,0,0.6); }
+.equipment-slot .power-socket.filled.socket-blue   { background: linear-gradient(180deg, #66bdf2, #3498db); border-color: #3498db; box-shadow: 0 0 6px rgba(52, 152, 219, 0.6), inset 0 1px 2px rgba(0,0,0,0.6); }
+.equipment-slot .power-socket.filled.socket-purple { background: linear-gradient(180deg, #b788d3, #9b59b6); border-color: #9b59b6; box-shadow: 0 0 6px rgba(155, 89, 182, 0.6), inset 0 1px 2px rgba(0,0,0,0.6); }
+.equipment-slot .power-socket.filled.socket-pearl  { background: linear-gradient(180deg, #ffffff, #ecf0f1); border-color: #d5d9da; box-shadow: 0 0 6px rgba(236, 240, 241, 0.7), inset 0 1px 2px rgba(0,0,0,0.4); }
+.equipment-slot .power-socket.filled.socket-yellow { background: linear-gradient(180deg, #ffe277, #f1c40f); border-color: #f1c40f; box-shadow: 0 0 6px rgba(241, 196, 15, 0.6), inset 0 1px 2px rgba(0,0,0,0.6); }
+.equipment-slot .power-socket.filled.socket-azure  { background: linear-gradient(180deg, #41e2f3, #00bcd4); border-color: #00bcd4; box-shadow: 0 0 6px rgba(0, 188, 212, 0.6), inset 0 1px 2px rgba(0,0,0,0.6); }
+.equipment-slot .power-socket.filled.socket-earth  { background: linear-gradient(180deg, #a07762, #795548); border-color: #795548; box-shadow: 0 0 6px rgba(121, 85, 72, 0.6), inset 0 1px 2px rgba(0,0,0,0.6); }
+
+/* Slightly smaller sockets on small screens */
+@media (max-width: 768px) {
+    .equipment-slot .power-socket-bar { left: 4px; top: 4px; bottom: 24px; width: 10px; }
+    .equipment-slot .power-socket { width: 8px; height: 14px; }
+}
+
+/* Level label overlay at bottom-right */
+.gear-level-overlay {
+    position: absolute;
+    right: 6px;
+    bottom: 4px;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 0.8em;
+    letter-spacing: 0.3px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8), 0 0 6px rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 2px 6px;
+    z-index: 4; /* above sockets */
+}
+
+/* Raise content above icon */
+.equipped-gear { position: relative; z-index: 1; }
+
+/* Slot-specific icon backgrounds */
+.slot-helmet::after { background-image: url('../../assets/helmet1.png'); }
+.slot-chest::after  { background-image: url('../../assets/chest1.png'); }
+.slot-boots::after  { background-image: url('../../assets/boots1.png'); }
+.slot-weapon::after { background-image: url('../../assets/sword1.png'); }
+.slot-ring::after   { background-image: url('../../assets/ring1.png'); }
+
+/* Equipment slot content */
+.equipped-gear {
+    text-align: center;
+    font-size: 0.75em;
+    padding: 4px;
+}
+
+.equipped-gear-icon {
+    font-size: 1.5em;
+    margin-bottom: 2px;
+    filter: drop-shadow(0 0 5px rgba(255, 215, 0, 0.5));
+}
+
+.equipped-gear-name {
+    font-weight: 600;
+    color: #e8e8e8;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+
+/* Pet slot styling */
+.slot-pet {
+    border-color: #9c27b0;
+    background: linear-gradient(135deg, #1e1a2e, #2d1a3d);
+    box-shadow: 0 0 15px rgba(156, 39, 176, 0.2);
+}
+
+.slot-pet:hover {
+    border-color: #ba68c8;
+    box-shadow: 0 0 20px rgba(156, 39, 176, 0.4);
+}
+
+.pet-placeholder {
+    font-size: 0.6em;
+    color: #ba68c8;
+    font-style: italic;
+    margin-top: 2px;
+    text-shadow: 0 0 3px rgba(186, 104, 200, 0.5);
+}
+
+/* Power stone count on equipment slots */
+.power-stone-count {
+    font-size: 0.6em;
+    color: #ffcd3c;
+    font-weight: 600;
+    margin-top: 1px;
+    text-shadow: 0 0 3px rgba(255, 205, 60, 0.5);
+}
+
+/* Gear level display on equipment slots */
+.gear-level {
+    font-size: 0.6em;
+    color: #ffd700;
+    font-weight: 600;
+    margin-top: 1px;
+    text-shadow: 0 0 3px rgba(255, 215, 0, 0.5);
+}
+
+/* Integrated level controls */
+.level-controls-integrated {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.level-btn-integrated {
+    background: linear-gradient(135deg, #444444, #333333);
+    color: #ffffff;
+    border: 1px solid #666666;
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.8em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.level-btn-integrated:hover:not(:disabled) {
+    background: linear-gradient(135deg, #555555, #444444);
+    border-color: #777777;
+    transform: scale(1.05);
+}
+
+.level-btn-integrated:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.level-btn-integrated:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+/* Power Stones Section */
+.power-stones .section-title {
+    font-size: 1.3em;
+    margin-bottom: 20px;
+}
+
+/* Equipment stones sections - Made more compact */
+.equipped-stones-by-slot {
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 6px;
+}
+
+.equipment-stones-section {
+    margin-bottom: 4px;
+    background: linear-gradient(135deg, rgba(26, 31, 46, 0.2), rgba(37, 43, 63, 0.2));
+    border-radius: 6px;
+    padding: 4px;
+    border: 1px solid #2a3442;
+    transition: all 0.2s ease;
+}
+
+.equipment-stones-section:hover {
+    border-color: #3a4556;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.equipment-stones-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid #333333;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 3px;
+    background: #222222;
+}
+
+.equipment-stones-header:hover {
+    background: #2a2a2a;
+    border-color: #444444;
+}
+
+.collapse-icon {
+    color: #ffd700;
+    font-size: 0.9em;
+    font-weight: bold;
+    margin-left: auto;
+    transition: transform 0.2s ease;
+    user-select: none;
+}
+
+.equipment-stones-header:hover .collapse-icon {
+    color: #ffed4e;
+}
+
+/* Equipped stones container */
+.equipped-stones {
+    transition: all 0.3s ease;
+    overflow: hidden;
+    padding: 1px 0;
+}
+
+.equipped-stone {
+    background: #1a1a1a;
+    border: 1px solid var(--stone-color);
+    padding: 4px 6px;
+    margin: 2px 0;
+    border-radius: 4px;
+    position: relative;
+}
+
+.equipped-stone-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.equipped-stone-name {
+    color: #ffffff;
+    font-size: 0.75em;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.remove-stone-btn {
+    background: #ff4444;
+    border: none;
+    color: white;
+    padding: 1px 4px;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 0.7em;
+    font-weight: bold;
+    transition: all 0.2s ease;
+}
+
+.remove-stone-btn:hover {
+    background: #ff6666;
+    transform: scale(1.05);
+}
+
+.no-stones-text {
+    color: #888888;
+    text-align: center;
+    font-size: 0.75em;
+    padding: 8px;
+    font-style: italic;
+}
+
+/* Raw Build Stats Section */
+.raw-build-stats-section {
+    margin-top: 20px;
+    background: none;
+    border: none;
+    overflow: visible;
+    box-shadow: none;
+    border-radius: 0;
+}
+
+.raw-build-stats-section .section-title {
+    background: none;
+    color: #ffd700;
+    margin: 0 0 15px 0;
+    padding: 0;
+    font-size: 1.2em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-shadow: none;
+    border-bottom: none;
+    text-align: center;
+}
+
+/* Raw Stats Display */
+.raw-stats-display {
+    overflow-y: visible;
+    padding: 0;
+    background: none;
+}
+
+.stat-category {
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.3), rgba(20, 20, 20, 0.3));
+    border-radius: 10px;
+    padding: 12px;
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.stat-category:last-child {
+    margin-bottom: 0;
+}
+
+.stat-category-title {
+    font-size: 1em;
+    font-weight: 700;
+    color: #ffd700;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 237, 78, 0.15));
+    border-radius: 8px;
+    border: 1px solid rgba(255, 215, 0, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 2px 4px rgba(255, 215, 0, 0.1);
+}
+
+.raw-stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    margin: 4px 0;
+    background: linear-gradient(135deg, rgba(26, 26, 26, 0.6), rgba(35, 35, 35, 0.6));
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.raw-stat-row::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(255, 237, 78, 0.05));
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.raw-stat-row:hover {
+    border-color: rgba(255, 215, 0, 0.3);
+    transform: translateX(2px);
+    box-shadow: 0 2px 8px rgba(255, 215, 0, 0.1);
+}
+
+.raw-stat-row:hover::before {
+    opacity: 1;
+}
+
+.raw-stat-name {
+    color: #e8e8e8;
+    font-size: 0.9em;
+    font-weight: 500;
+    flex: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    position: relative;
+    z-index: 1;
+}
+
+.raw-stat-value {
+    color: #00ff88;
+    font-weight: 700;
+    font-size: 0.9em;
+    text-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
+    position: relative;
+    z-index: 1;
+    padding: 2px 8px;
+    background: rgba(0, 255, 136, 0.1);
+    border-radius: 4px;
+    border: 1px solid rgba(0, 255, 136, 0.2);
+}
+
+.no-stats-container {
+    padding: 30px 20px;
+    text-align: center;
+    background: linear-gradient(135deg, rgba(26, 26, 26, 0.6), rgba(35, 35, 35, 0.6));
+    border-radius: 10px;
+    border: 2px dashed rgba(255, 215, 0, 0.3);
+    margin: 15px;
+}
+
+.no-stats-text {
+    color: #999999;
+    font-size: 0.9em;
+    font-style: italic;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Spacing between power stone stat labels and values */
+.stone-defensive .stone-stat-value,
+.stone-offensive .stone-stat-value {
+    margin-left: 6px;
+}
+
+/* Optional: style for clan buff toggle in controls */
+.clan-buff-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 215, 0, 0.08);
+    border: 1px solid rgba(255, 215, 0, 0.25);
+    color: #ffd700;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+.clan-buff-toggle input {
+    accent-color: #ffd700;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1a1a1a;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #444444;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}
+
+/* Enhanced scrollbar for equipment stones */
+.equipped-stones-by-slot::-webkit-scrollbar {
+    width: 6px;
+}
+
+.equipped-stones-by-slot::-webkit-scrollbar-track {
+    background: rgba(26, 26, 26, 0.5);
+    border-radius: 3px;
+}
+
+.equipped-stones-by-slot::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #ffd700, #ffed4e);
+    border-radius: 3px;
+}
+
+.equipped-stones-by-slot::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #ffed4e, #ffd700);
+}
+
+/* Drag and Drop Effects */
+.equipment-slot.drag-over {
+    border-color: #ffd700 !important;
+    background: rgba(255, 215, 0, 0.1) !important;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5) !important;
+}
+
+.stone-item.dragging {
+    opacity: 0.5;
+    transform: scale(0.95);
+}
+
+/* Power Stone Color Classes */
+.stone-rotten {
+    --stone-color: #8B4513;
+}
+
+.stone-red {
+    --stone-color: #e74c3c;
+}
+
+.stone-green {
+    --stone-color: #27ae60;
+}
+
+.stone-blue {
+    --stone-color: #3498db;
+}
+
+.stone-purple {
+    --stone-color: #9b59b6;
+}
+
+.stone-pearl {
+    --stone-color: #ecf0f1;
+}
+
+.stone-yellow {
+    --stone-color: #f1c40f;
+}
+
+.stone-azure {
+    --stone-color: #00bcd4;
+}
+
+.stone-earth {
+    --stone-color: #795548;
+}
+
+/* Stone type name colors for headers */
+.stone-type-name-rotten {
+    color: #8B4513;
+}
+
+.stone-type-name-red {
+    color: #e74c3c;
+}
+
+.stone-type-name-green {
+    color: #27ae60;
+}
+
+.stone-type-name-blue {
+    color: #3498db;
+}
+
+.stone-type-name-purple {
+    color: #9b59b6;
+}
+
+.stone-type-name-pearl {
+    color: #ecf0f1;
+}
+
+.stone-type-name-yellow {
+    color: #f1c40f;
+}
+
+.stone-type-name-azure {
+    color: #00bcd4;
+}
+
+.stone-type-name-earth {
+    color: #795548;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .main-layout {
+        grid-template-columns: 350px 1fr 280px;
+        gap: 15px;
+    }
+
+    .stone-levels-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 1024px) {
+    .main-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+    }
+
+    .container {
+        padding: 15px;
+    }
+
+    .header h1 {
+        font-size: 2em;
+    }
+
+    .stone-levels-grid {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .equipment-grid {
+        grid-template-columns: repeat(2, 80px);
+        grid-template-rows: repeat(3, 80px);
+        gap: 10px;
+    }
+
+    .equipment-slot {
+        width: 80px;
+        height: 80px;
+    }
+
+    .stone-levels-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .stone-type-header {
+        padding: 10px 12px;
+    }
+
+    .stone-type-name {
+        font-size: 0.8em;
+    }
+
+    .gear-rank-stars { left: 4px; bottom: 2px; }
+    .rank-star { font-size: 12px; }
+    .equipment-slot .power-socket-bar { bottom: 24px; }
+}
+
+/* Your Build panel background using dungeon image */
+.panel.build-panel {
+    /* Dark overlay first, then the image */
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.55)),
+                url('../../assets/hunt_dungeon_bg.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Keep section title readable over image */
+.panel.build-panel .section-title {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+/* Slightly emphasize the equipment grid on image background */
+.panel.build-panel .equipment-grid {
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 10px;
+    padding: 10px;
+}
+
+/* Adjust socket bar upward to make room for rank stars */
+.equipment-slot .power-socket-bar {
+    position: absolute;
+    top: 6px;
+    bottom: 26px; /* was 6px; leave space at bottom for stars */
+    left: 6px;
+    width: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 3; /* above slot background image and hover overlay */
+}
+
+/* Gear rank stars (bottom-left) */
+.gear-rank-stars {
+    position: absolute;
+    left: 6px;
+    bottom: 4px;
+    display: flex;
+    gap: 2px;
+    z-index: 4; /* above sockets and cover */
+}
+
+.rank-star {
+    font-size: 14px;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.5);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.12s ease, color 0.12s ease, text-shadow 0.12s ease;
+}
+
+.rank-star:hover {
+    transform: scale(1.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.rank-star.filled {
+    color: #ffd700;
+    text-shadow: 0 0 6px rgba(255, 215, 0, 0.6), 0 1px 2px rgba(0,0,0,0.9);
+}
+
+/* Segmented super/mega socket visuals */
+.equipment-slot .power-socket.filled.socket-super {
+    /* Two clean bands: top=--c1, bottom=--c2; no separators */
+    background:
+        linear-gradient(to bottom, var(--c1), var(--c1)) top/100% 50% no-repeat,
+        linear-gradient(to bottom, var(--c2), var(--c2)) bottom/100% 50% no-repeat;
+    border-color: var(--c1, rgba(255,255,255,0.4));
+}
+
+.equipment-slot .power-socket.filled.socket-mega {
+    /* Three clean bands: top=--c1, middle=--c2, bottom=--c3; no separators */
+    background:
+        linear-gradient(to bottom, var(--c1), var(--c1)) top/100% 33.34% no-repeat,
+        linear-gradient(to bottom, var(--c2), var(--c2)) center/100% 33.32% no-repeat,
+        linear-gradient(to bottom, var(--c3), var(--c3)) bottom/100% 33.34% no-repeat;
+    border-color: var(--c1, rgba(255,255,255,0.4));
+}
+
+/* Optional: subtle highlight to keep 3D feel */
+.equipment-slot .power-socket.filled.socket-super,
+.equipment-slot .power-socket.filled.socket-mega {
+    box-shadow: 0 0 6px rgba(0,0,0,0.25), inset 0 1px 2px rgba(0,0,0,0.6);
+}
+
+/* Segmented color variables for super/mega sockets */
+/* Map each stone type to --c1/--c2/--c3 via utility classes */
+.equipment-slot .power-socket.socket-c1-rotten { --c1: #8B4513; }
+.equipment-slot .power-socket.socket-c2-rotten { --c2: #8B4513; }
+.equipment-slot .power-socket.socket-c3-rotten { --c3: #8B4513; }
+
+.equipment-slot .power-socket.socket-c1-red    { --c1: #e74c3c; }
+.equipment-slot .power-socket.socket-c2-red    { --c2: #e74c3c; }
+.equipment-slot .power-socket.socket-c3-red    { --c3: #e74c3c; }
+
+.equipment-slot .power-socket.socket-c1-green  { --c1: #27ae60; }
+.equipment-slot .power-socket.socket-c2-green  { --c2: #27ae60; }
+.equipment-slot .power-socket.socket-c3-green  { --c3: #27ae60; }
+
+.equipment-slot .power-socket.socket-c1-blue   { --c1: #3498db; }
+.equipment-slot .power-socket.socket-c2-blue   { --c2: #3498db; }
+.equipment-slot .power-socket.socket-c3-blue   { --c3: #3498db; }
+
+.equipment-slot .power-socket.socket-c1-purple { --c1: #9b59b6; }
+.equipment-slot .power-socket.socket-c2-purple { --c2: #9b59b6; }
+.equipment-slot .power-socket.socket-c3-purple { --c3: #9b59b6; }
+
+.equipment-slot .power-socket.socket-c1-pearl  { --c1: #ecf0f1; }
+.equipment-slot .power-socket.socket-c2-pearl  { --c2: #ecf0f1; }
+.equipment-slot .power-socket.socket-c3-pearl  { --c3: #ecf0f1; }
+
+.equipment-slot .power-socket.socket-c1-yellow { --c1: #f1c40f; }
+.equipment-slot .power-socket.socket-c2-yellow { --c2: #f1c40f; }
+.equipment-slot .power-socket.socket-c3-yellow { --c3: #f1c40f; }
+
+.equipment-slot .power-socket.socket-c1-azure  { --c1: #00bcd4; }
+.equipment-slot .power-socket.socket-c2-azure  { --c2: #00bcd4; }
+.equipment-slot .power-socket.socket-c3-azure  { --c3: #00bcd4; }
+
+.equipment-slot .power-socket.socket-c1-earth  { --c1: #795548; }
+.equipment-slot .power-socket.socket-c2-earth  { --c2: #795548; }
+.equipment-slot .power-socket.socket-c3-earth  { --c3: #795548; }
+
+/* Center Gear Score under the equipment grid */
+.gear-score-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.gear-score-container .power-rating {
+  margin-top: 0; /* override default top margin to sit closer to grid */
+}
