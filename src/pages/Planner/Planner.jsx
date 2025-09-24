@@ -309,14 +309,50 @@ const Planner = () => {
                     )}
                   </div>
 
+                  {/* Cost Breakdown */}
+                  {(() => {
+                    const merges = result.merges || [];
+                    const superFromSuper = merges.filter(m => m.type === 'super').length;
+                    const megaFromMega = merges.filter(m => m.type === 'mega').length; // counts both a super and a mega merge
+                    const megaFromUpgrade = merges.filter(m => m.type === 'upgrade').length; // counts only a mega merge
+
+                    const superMerges = superFromSuper + megaFromMega;
+                    const megaMerges = megaFromMega + megaFromUpgrade;
+
+                    const COSTS = {
+                      super: { gold: 5000, df: 5000, fs: 777 },
+                      mega:  { gold: 10000, df: 10000, fs: 2777 }
+                    };
+
+                    const totalGold = superMerges * COSTS.super.gold + megaMerges * COSTS.mega.gold;
+                    const totalDF   = superMerges * COSTS.super.df   + megaMerges * COSTS.mega.df;
+                    const totalFS   = superMerges * COSTS.super.fs   + megaMerges * COSTS.mega.fs;
+
+                    const fmt = (n) => Number(n).toLocaleString();
+
+                    return (
+                      <div className="stat-category">
+                        <div className="stat-category-title">Cost Breakdown</div>
+                        <div className="raw-stat-row"><span className="raw-stat-name">Super Merges</span><span className="raw-stat-value">{fmt(superMerges)}</span></div>
+                        <div className="raw-stat-row"><span className="raw-stat-name">Mega Merges</span><span className="raw-stat-value">{fmt(megaMerges)}</span></div>
+                        <div className="raw-stat-row"><span className="raw-stat-name">Gold</span><span className="raw-stat-value">{fmt(totalGold)}</span></div>
+                        <div className="raw-stat-row"><span className="raw-stat-name">DF Gems</span><span className="raw-stat-value">{fmt(totalDF)}</span></div>
+                        <div className="raw-stat-row"><span className="raw-stat-name">FS Gems</span><span className="raw-stat-value">{fmt(totalFS)}</span></div>
+                      </div>
+                    );
+                  })()}
+
                   <div className="stat-category">
                     <div className="stat-category-title">Achieved vs Goals</div>
-                    {Object.entries(result.goals).map(([stat, target]) => (
-                      <div key={stat} className="raw-stat-row">
-                        <span className="raw-stat-name">{stat}</span>
-                        <span className="raw-stat-value">{Math.min(target, result.achieved[stat]||0).toFixed(2)} / {target.toFixed(2)}</span>
-                      </div>
-                    ))}
+                    {Object.entries(result.goals).map(([stat, target]) => {
+                      const achievedVal = (result.achieved[stat] ?? 0);
+                      return (
+                        <div key={stat} className="raw-stat-row">
+                          <span className="raw-stat-name">{stat}</span>
+                          <span className="raw-stat-value">{achievedVal.toFixed(2)} / {target.toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
