@@ -4,8 +4,7 @@ import { planBuild } from '../src/helpers/planner.js';
 const goals = [
     { stat: 'Dodge Chance', value: 90 },
     { stat: 'Zombie Damage Reduction', value: 90 },
-    { stat: 'Damage Reduction', value: 88 },
-    { stat: 'Movement Speed', value: 140 }
+    { stat: 'Damage Reduction', value: 88 }
 ];
 
 const inventory = {

@@ -20,10 +20,34 @@ const Planner = () => {
   const [supers, setSupers] = useState([]); // { primary, secondary, qty }
   const [megas, setMegas] = useState([]); // { primary, secondary, tertiary, qty }
   const [maxMerges, setMaxMerges] = useState(24);
+  const [disablePrefill, setDisablePrefill] = useState(false);
 
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [isPlanning, setIsPlanning] = useState(false);
+
+  // Ensure selections remain distinct
+  const pickFirstDifferent = (exclude) => ALL_TYPES.find(t => !exclude.includes(t)) || ALL_TYPES[0];
+  const normalizeSuper = (s) => {
+    const primary = s.primary;
+    let secondary = s.secondary;
+    if (!secondary || secondary === primary) {
+      secondary = pickFirstDifferent([primary]);
+    }
+    return { ...s, primary, secondary };
+  };
+  const normalizeMega = (m) => {
+    const primary = m.primary;
+    let secondary = m.secondary;
+    let tertiary = m.tertiary;
+    if (!secondary || secondary === primary) {
+      secondary = pickFirstDifferent([primary]);
+    }
+    if (!tertiary || tertiary === primary || tertiary === secondary) {
+      tertiary = pickFirstDifferent([primary, secondary]);
+    }
+    return { ...m, primary, secondary, tertiary };
+  };
 
   // Build friendly goal stat options from POWER_STONES defensives
   const GOAL_STAT_OPTIONS = useMemo(() => {
@@ -60,13 +84,21 @@ const Planner = () => {
 
   const addSuperRow = () => setSupers(prev => [...prev, { primary: ALL_TYPES[0], secondary: ALL_TYPES[1] || ALL_TYPES[0], qty: 1 }]);
   const updateSuper = (idx, key, val) => {
-    setSupers(prev => prev.map((s, i) => i === idx ? { ...s, [key]: key === 'qty' ? Math.max(0, Number(val)||0) : val } : s));
+    setSupers(prev => prev.map((s, i) => {
+      if (i !== idx) return s;
+      const next = normalizeSuper({ ...s, [key]: key === 'qty' ? Math.max(0, Number(val)||0) : val });
+      return next;
+    }));
   };
   const removeSuper = (idx) => setSupers(prev => prev.filter((_, i) => i !== idx));
 
   const addMegaRow = () => setMegas(prev => [...prev, { primary: ALL_TYPES[0], secondary: ALL_TYPES[1] || ALL_TYPES[0], tertiary: ALL_TYPES[2] || ALL_TYPES[0], qty: 1 }]);
   const updateMega = (idx, key, val) => {
-    setMegas(prev => prev.map((m, i) => i === idx ? { ...m, [key]: key === 'qty' ? Math.max(0, Number(val)||0) : val } : m));
+    setMegas(prev => prev.map((m, i) => {
+      if (i !== idx) return m;
+      const next = normalizeMega({ ...m, [key]: key === 'qty' ? Math.max(0, Number(val)||0) : val });
+      return next;
+    }));
   };
   const removeMega = (idx) => setMegas(prev => prev.filter((_, i) => i !== idx));
 
@@ -77,10 +109,10 @@ const Planner = () => {
 
     const inventory = {
       l7,
-      supers: supers.filter(s => s.qty > 0),
-      megas: megas.filter(m => m.qty > 0)
+      supers: supers.filter(s => s.qty > 0).map(normalizeSuper),
+      megas: megas.filter(m => m.qty > 0).map(normalizeMega)
     };
-    const options = { maxMerges, timeLimitMs: 1000, beamWidth: 16, topChildren: 10 };
+    const options = { maxMerges, timeLimitMs: 1000, beamWidth: 16, topChildren: 10, disablePrefill };
 
     // Try worker-based planning to avoid UI freeze
     try {
@@ -169,6 +201,7 @@ const Planner = () => {
             <Section title="Options">
               <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                 <label>Max Merges <input type="number" min="0" max="100" value={maxMerges} onChange={e => setMaxMerges(Math.max(0, Number(e.target.value)||0))} style={{ width: 80 }} /></label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} title="When enabled, the planner will not prefill with existing L7/supers/megas before planning."><input type="checkbox" checked={disablePrefill} onChange={e => setDisablePrefill(e.target.checked)} /> Disable Prefill</label>
                 <button className="btn" onClick={runPlan} disabled={isPlanning}>{isPlanning ? 'Planning…' : 'Plan'}</button>
               </div>
               <div className="stone-instruction" style={{ marginTop: 8 }}>
@@ -269,30 +302,68 @@ const Planner = () => {
 
                   <div className="stat-category">
                     <div className="stat-category-title">Existing Stones Used</div>
-                    {Object.keys(result.usedExistingSupers||{}).length === 0 && Object.keys(result.usedExistingMegas||{}).length === 0 ? (
-                      <div className="raw-stat-row"><span className="raw-stat-name">None</span></div>
-                    ) : (
-                      <>
-                        {Object.entries(result.usedExistingSupers||{}).map(([k, c]) => (
-                          <div key={`s-${k}`} className="raw-stat-row"><span className="raw-stat-name">Super {k.replace('+', ' + ')}</span><span className="raw-stat-value">x{c}</span></div>
-                        ))}
-                        {Object.entries(result.usedExistingMegas||{}).map(([k, c]) => (
-                          <div key={`m-${k}`} className="raw-stat-row"><span className="raw-stat-name">Mega {k.replace(/\+/g, ' + ')}</span><span className="raw-stat-value">x{c}</span></div>
-                        ))}
-                      </>
-                    )}
+                    {(() => {
+                      const sockets = result.sockets || [];
+                      const sup = new Map();
+                      const meg = new Map();
+                      for (const s of sockets) {
+                        if (!s) continue;
+                        if (s.kind === 'super-existing') {
+                          const [a,b] = s.parts || [];
+                          const key = `${a}+${b}`;
+                          sup.set(key, (sup.get(key) || 0) + 1);
+                        } else if (s.kind === 'mega-existing') {
+                          const [a,b,c] = s.parts || [];
+                          const key = `${a}+${b}+${c}`;
+                          meg.set(key, (meg.get(key) || 0) + 1);
+                        } else if (s.kind === 'upgrade-super-to-mega') {
+                          const [a,b] = s.parts || [];
+                          const key = `${a}+${b}`;
+                          sup.set(key, (sup.get(key) || 0) + 1);
+                        }
+                      }
+                      const supEntries = Array.from(sup.entries());
+                      const megEntries = Array.from(meg.entries());
+                      if (supEntries.length === 0 && megEntries.length === 0) {
+                        return (<div className="raw-stat-row"><span className="raw-stat-name">None</span></div>);
+                      }
+                      return (
+                        <>
+                          {supEntries.map(([k, c]) => (
+                            <div key={`s-${k}`} className="raw-stat-row"><span className="raw-stat-name">Super {k.replace(/\+/g, ' + ')}</span><span className="raw-stat-value">x{c}</span></div>
+                          ))}
+                          {megEntries.map(([k, c]) => (
+                            <div key={`m-${k}`} className="raw-stat-row"><span className="raw-stat-name">Mega {k.replace(/\+/g, ' + ')}</span><span className="raw-stat-value">x{c}</span></div>
+                          ))}
+                        </>
+                      );
+                    })()}
                   </div>
 
                   <div className="stat-category">
                     <div className="stat-category-title">Sockets Plan (Defensive)</div>
                     {(() => {
+                      const formatSocket = (s) => {
+                        if (!s) return 'Empty';
+                        const p = s.parts || [];
+                        const toName = (t) => t; // keep type keys to match plan output; swap to stoneTypeName(t) for proper names if desired
+                        switch (s.kind) {
+                          case 'regular': return `L7 ${toName(p[0])}`;
+                          case 'super': return `Super ${toName(p[0])} + ${toName(p[1])}`;
+                          case 'super-existing': return `Existing Super ${toName(p[0])} + ${toName(p[1])}`;
+                          case 'mega': return `Mega ${toName(p[0])} + ${toName(p[1])} + ${toName(p[2])}`;
+                          case 'mega-existing': return `Existing Mega ${toName(p[0])} + ${toName(p[1])} + ${toName(p[2])}`;
+                          case 'upgrade-super-to-mega': return `Upgrade Super ${toName(p[0])} + ${toName(p[1])} -> + ${toName(p[2])}`;
+                          default: return s.label || 'Unknown';
+                        }
+                      };
                       const total = result.socketsAvailableDef || SOCKET_LIMITS.defensive;
                       const filled = result.sockets || [];
                       const padded = [...filled, ...Array(Math.max(0, total - filled.length)).fill(null)];
                       return padded.map((s, idx) => (
                         <div key={idx} className="raw-stat-row">
                           <span className="raw-stat-name">Slot {idx+1}</span>
-                          <span className="raw-stat-value">{s ? s.label : 'Empty'}</span>
+                          <span className="raw-stat-value">{formatSocket(s)}</span>
                         </div>
                       ));
                     })()}
@@ -362,6 +433,6 @@ const Planner = () => {
       </div>
     </div>
   );
-};
+}
 
 export default Planner;

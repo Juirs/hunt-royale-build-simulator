@@ -217,59 +217,73 @@ function cloneInv(inv) {
 
 // Substitute crafted supers/megas with matching existing ones from inventory to reduce merges and use current stones
 function substituteExisting(sequence, inventoryInput) {
-  const invCombos = {
-    supers: (inventoryInput?.supers || []).map(s => ({ ...s })),
-    megas: (inventoryInput?.megas || []).map(m => ({ ...m }))
-  };
+  // Canonical key helpers (primary; unordered secondaries)
+  const mkMegaKey = (a, b, c) => `${a}|${b < c ? b : c}|${b < c ? c : b}`;
+
+  // Build remaining buckets from inventory
+  const megaRemain = new Map();
+  (inventoryInput?.megas || []).forEach(m => {
+    const key = mkMegaKey(m.primary, m.secondary, m.tertiary);
+    megaRemain.set(key, (megaRemain.get(key) || 0) + (m.qty || 0));
+  });
+  const superRemain = new Map();
+  (inventoryInput?.supers || []).forEach(s => {
+    // Treat supers as unordered pairs for availability
+    const a = s.primary, b = s.secondary;
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+    superRemain.set(key, (superRemain.get(key) || 0) + (s.qty || 0));
+  });
+
   const seqOut = sequence.map(it => ({ ...it }));
 
+  // Reserve from buckets for any existing items already present in the planned sequence (e.g., from prefill)
+  for (const it of seqOut) {
+    if (it.kind === 'mega-existing' && it.parts?.length >= 3) {
+      const [a,b,c] = it.parts;
+      const key = mkMegaKey(a,b,c);
+      const left = megaRemain.get(key) || 0;
+      if (left > 0) megaRemain.set(key, left - 1);
+    } else if (it.kind === 'super-existing' && it.parts?.length >= 2) {
+      const [a,b] = it.parts;
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+      const left = superRemain.get(key) || 0;
+      if (left > 0) superRemain.set(key, left - 1);
+    } else if (it.kind === 'upgrade-super-to-mega' && it.parts?.length >= 2) {
+      const [a,b] = it.parts; // existing super a+b consumed
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+      const left = superRemain.get(key) || 0;
+      if (left > 0) superRemain.set(key, left - 1);
+    }
+  }
+
   const tryUseExistingMega = (a, b, c) => {
-    // Try exact order first
-    let found = invCombos.megas.find(m => m.primary === a && m.secondary === b && m.tertiary === c && (m.qty || 0) > 0);
-    if (found) {
-      found.qty = Math.max(0, (found.qty || 0) - 1);
-      return makeItem('mega-existing', [a, b, c], 0, `Existing Mega ${a}+${b}+${c}`);
-    }
-    // Fallback: secondaries swapped
-    found = invCombos.megas.find(m => m.primary === a && m.secondary === c && m.tertiary === b && (m.qty || 0) > 0);
-    if (found) {
-      found.qty = Math.max(0, (found.qty || 0) - 1);
-      // Keep the planned order in the item while consuming the reversed inventory
+    const key = mkMegaKey(a,b,c);
+    const left = megaRemain.get(key) || 0;
+    if (left > 0) {
+      megaRemain.set(key, left - 1);
       return makeItem('mega-existing', [a, b, c], 0, `Existing Mega ${a}+${b}+${c}`);
     }
     return null;
   };
+
   const tryUseExistingSuper = (p, s) => {
-    // Try exact order
-    let found = invCombos.supers.find(x => x.primary === p && x.secondary === s && (x.qty || 0) > 0);
-    if (found) {
-      found.qty = Math.max(0, (found.qty || 0) - 1);
-      return makeItem('super-existing', [p, s], 0, `Existing Super ${p}+${s}`);
-    }
-    // Fallback: reversed order
-    found = invCombos.supers.find(x => x.primary === s && x.secondary === p && (x.qty || 0) > 0);
-    if (found) {
-      found.qty = Math.max(0, (found.qty || 0) - 1);
+    // We allow any order availability, but preserve planned order in the item
+    const key = p < s ? `${p}|${s}` : `${s}|${p}`;
+    const left = superRemain.get(key) || 0;
+    if (left > 0) {
+      superRemain.set(key, left - 1);
       return makeItem('super-existing', [p, s], 0, `Existing Super ${p}+${s}`);
     }
     return null;
   };
+
   const tryUpgradeFromExistingSuper = (a, b, c) => {
-    // Try to use an existing super with same primary a and one of secondaries, add the remaining type as L7
-    // Prefer matching with the higher-contributing secondary first (arbitrary tie-breaker)
-    const order = [b, c];
-    for (const s of order) {
-      // exact order
-      let found = invCombos.supers.find(x => x.primary === a && x.secondary === s && (x.qty || 0) > 0);
-      if (found) {
-        found.qty = Math.max(0, (found.qty || 0) - 1);
-        const t = s === b ? c : b; // the remaining type to add
-        return makeItem('upgrade-super-to-mega', [a, s, t], 1, `Upgrade Super ${a}+${s} -> +${t}`);
-      }
-      // reversed order super still upgrades to primary a
-      found = invCombos.supers.find(x => x.primary === s && x.secondary === a && (x.qty || 0) > 0);
-      if (found) {
-        found.qty = Math.max(0, (found.qty || 0) - 1);
+    // Use an existing super with primary a and one of (b,c) in any order; consume from unordered bucket
+    for (const s of [b, c]) {
+      const key = a < s ? `${a}|${s}` : `${s}|${a}`;
+      const left = superRemain.get(key) || 0;
+      if (left > 0) {
+        superRemain.set(key, left - 1);
         const t = s === b ? c : b;
         return makeItem('upgrade-super-to-mega', [a, s, t], 1, `Upgrade Super ${a}+${s} -> +${t}`);
       }
@@ -289,7 +303,6 @@ function substituteExisting(sequence, inventoryInput) {
       const repl = tryUseExistingSuper(p, s);
       if (repl) seqOut[i] = repl;
     }
-    // Do not substitute other kinds; upgrades already consume existing supers
   }
 
   return seqOut;
