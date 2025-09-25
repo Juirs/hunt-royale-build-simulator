@@ -1,14 +1,20 @@
-// filepath: src/helpers/planner.js
 // Planner algorithm: compute minimal-merge plan to reach defensive goals within socket limits
 // Uses POWER_STONES definitions and existing helper assumptions
 
-import { POWER_STONES } from '../constants/powerStones.js';
+import {POWER_STONES} from '../constants/powerStones.js';
 
 // Hard-coded socket limits to match game rules
 export const SOCKET_LIMITS = {
   defensive: 12,
   offensive: 8
 };
+
+// Helper: check if inventory has any available (qty > 0) existing combo stones
+function hasAvailableCombos(inv) {
+  const hasMega = (inv?.megas || []).some(m => (m.qty || 0) > 0);
+  const hasSuper = (inv?.supers || []).some(s => (s.qty || 0) > 0);
+  return hasMega || hasSuper;
+}
 
 // Map human goal names to defensive stat keys used in POWER_STONES and their stone types
 const DEFENSIVE_GOAL_MAP = (() => {
@@ -207,6 +213,86 @@ function cloneInv(inv) {
     supers: (inv?.supers || []).map(s => ({ ...s })),
     megas: (inv?.megas || []).map(m => ({ ...m }))
   };
+}
+
+// Substitute crafted supers/megas with matching existing ones from inventory to reduce merges and use current stones
+function substituteExisting(sequence, inventoryInput) {
+  const invCombos = {
+    supers: (inventoryInput?.supers || []).map(s => ({ ...s })),
+    megas: (inventoryInput?.megas || []).map(m => ({ ...m }))
+  };
+  const seqOut = sequence.map(it => ({ ...it }));
+
+  const tryUseExistingMega = (a, b, c) => {
+    // Try exact order first
+    let found = invCombos.megas.find(m => m.primary === a && m.secondary === b && m.tertiary === c && (m.qty || 0) > 0);
+    if (found) {
+      found.qty = Math.max(0, (found.qty || 0) - 1);
+      return makeItem('mega-existing', [a, b, c], 0, `Existing Mega ${a}+${b}+${c}`);
+    }
+    // Fallback: secondaries swapped
+    found = invCombos.megas.find(m => m.primary === a && m.secondary === c && m.tertiary === b && (m.qty || 0) > 0);
+    if (found) {
+      found.qty = Math.max(0, (found.qty || 0) - 1);
+      // Keep the planned order in the item while consuming the reversed inventory
+      return makeItem('mega-existing', [a, b, c], 0, `Existing Mega ${a}+${b}+${c}`);
+    }
+    return null;
+  };
+  const tryUseExistingSuper = (p, s) => {
+    // Try exact order
+    let found = invCombos.supers.find(x => x.primary === p && x.secondary === s && (x.qty || 0) > 0);
+    if (found) {
+      found.qty = Math.max(0, (found.qty || 0) - 1);
+      return makeItem('super-existing', [p, s], 0, `Existing Super ${p}+${s}`);
+    }
+    // Fallback: reversed order
+    found = invCombos.supers.find(x => x.primary === s && x.secondary === p && (x.qty || 0) > 0);
+    if (found) {
+      found.qty = Math.max(0, (found.qty || 0) - 1);
+      return makeItem('super-existing', [p, s], 0, `Existing Super ${p}+${s}`);
+    }
+    return null;
+  };
+  const tryUpgradeFromExistingSuper = (a, b, c) => {
+    // Try to use an existing super with same primary a and one of secondaries, add the remaining type as L7
+    // Prefer matching with the higher-contributing secondary first (arbitrary tie-breaker)
+    const order = [b, c];
+    for (const s of order) {
+      // exact order
+      let found = invCombos.supers.find(x => x.primary === a && x.secondary === s && (x.qty || 0) > 0);
+      if (found) {
+        found.qty = Math.max(0, (found.qty || 0) - 1);
+        const t = s === b ? c : b; // the remaining type to add
+        return makeItem('upgrade-super-to-mega', [a, s, t], 1, `Upgrade Super ${a}+${s} -> +${t}`);
+      }
+      // reversed order super still upgrades to primary a
+      found = invCombos.supers.find(x => x.primary === s && x.secondary === a && (x.qty || 0) > 0);
+      if (found) {
+        found.qty = Math.max(0, (found.qty || 0) - 1);
+        const t = s === b ? c : b;
+        return makeItem('upgrade-super-to-mega', [a, s, t], 1, `Upgrade Super ${a}+${s} -> +${t}`);
+      }
+    }
+    return null;
+  };
+
+  for (let i = 0; i < seqOut.length; i++) {
+    const it = seqOut[i];
+    if (it.kind === 'mega') {
+      const [a, b, c] = it.parts;
+      let repl = tryUseExistingMega(a, b, c);
+      if (!repl) repl = tryUpgradeFromExistingSuper(a, b, c);
+      if (repl) seqOut[i] = repl;
+    } else if (it.kind === 'super') {
+      const [p, s] = it.parts;
+      const repl = tryUseExistingSuper(p, s);
+      if (repl) seqOut[i] = repl;
+    }
+    // Do not substitute other kinds; upgrades already consume existing supers
+  }
+
+  return seqOut;
 }
 
 function canUseItem(item, inv) {
@@ -649,39 +735,131 @@ export function stoneTypeName(type) {
 }
 
 // Prefill with existing stones (megas, supers, and available L7) to reduce residual before search
-function prefillExisting(candidates, inv, residual, socketsCap) {
+function prefillExisting(candidates, inv, residual, socketsCap, ubPerSocket, targetTypesForMix) {
   const invWork = cloneInv(inv);
   let residualWork = { ...residual };
   const seq = [];
   let socketsUsed = 0;
 
-  // Consider only zero-merge candidates and ensure availability
+  // Only consider zero-merge candidates; separate existing combo stones from regular L7
+  const zeroMerge = candidates.filter(c => c.mergesCost === 0 && (c.kind === 'mega-existing' || c.kind === 'super-existing' || c.kind === 'regular'));
+  const existingZero = zeroMerge.filter(c => c.kind !== 'regular');
+  const regularZero = zeroMerge.filter(c => c.kind === 'regular');
+
+  // Safety caps for prefill
+  const REGULAR_PREFILL_MAX = Math.min(3, socketsCap); // at most 3 regular L7 sockets
+  const EXISTING_COMBO_PREFILL_MAX = Math.max(1, Math.min(4, Math.floor(socketsCap / 3))); // avoid starving sockets
+  let regularUsed = 0;
+  let existingCombosUsed = 0;
+
+  const minMegasNeededForResidual = (residualStats) => {
+    if (!targetTypesForMix || targetTypesForMix.length === 0) return 0;
+    let totalUnits = 0;
+    for (const type of targetTypesForMix) {
+      const stat = POWER_STONES[type].defensive;
+      const need = Math.max(0, residualStats[stat] || 0);
+      const vt = lv7DefVal(type);
+      if (vt > 0 && need > 0) {
+        totalUnits += Math.ceil((2 * need) / vt);
+      }
+    }
+    return Math.ceil(totalUnits / 4);
+  };
+
   const isAvailable = (it) => {
     if (it.kind === 'mega-existing') {
+      if (existingCombosUsed >= EXISTING_COMBO_PREFILL_MAX) return false;
       const { primary, secondary, tertiary } = it.uses.mega;
       const found = invWork.megas.find(m => m.primary === primary && m.secondary === secondary && m.tertiary === tertiary && (m.qty||0) > 0);
       return !!found;
     }
     if (it.kind === 'super-existing') {
+      if (existingCombosUsed >= EXISTING_COMBO_PREFILL_MAX) return false;
       const { primary, secondary } = it.uses.super;
       const found = invWork.supers.find(s => s.primary === primary && s.secondary === secondary && (s.qty||0) > 0);
       return !!found;
     }
     if (it.kind === 'regular') {
+      if (regularUsed >= REGULAR_PREFILL_MAX) return false;
       const t = it.parts[0];
-      return (invWork.l7[t] || 0) > 0; // limit to actual L7 pieces owned
+      return (invWork.l7[t] || 0) > 0;
     }
     return false;
   };
 
-  const zeroMerge = candidates.filter(c => c.mergesCost === 0 && (c.kind === 'mega-existing' || c.kind === 'super-existing' || c.kind === 'regular'));
+  const tryPlace = (it) => {
+    const nextResidual = residualAfter(residualWork, it);
+    const socketsLeft = socketsCap - (socketsUsed + 1);
+    // Upper-bound feasibility
+    if (!canPossiblyMeet(nextResidual, socketsLeft, ubPerSocket)) return false;
+    // Unit-based lower bound feasibility for planned mega mix among original types
+    const kLower = minMegasNeededForResidual(nextResidual);
+    if (kLower > socketsLeft) return false;
 
+    // Apply the item
+    if (it.kind === 'mega-existing') {
+      const { primary, secondary, tertiary } = it.uses.mega;
+      const m = invWork.megas.find(x => x.primary === primary && x.secondary === secondary && x.tertiary === tertiary);
+      if (m) m.qty = Math.max(0, (m.qty||0) - 1);
+      existingCombosUsed += 1;
+    } else if (it.kind === 'super-existing') {
+      const { primary, secondary } = it.uses.super;
+      const s = invWork.supers.find(x => x.primary === primary && x.secondary === secondary);
+      if (s) s.qty = Math.max(0, (s.qty||0) - 1);
+      existingCombosUsed += 1;
+    } else if (it.kind === 'regular') {
+      const t = it.parts[0];
+      invWork.l7[t] = (invWork.l7[t] || 0) - 1;
+      regularUsed += 1;
+    }
+    residualWork = nextResidual;
+    seq.push(it);
+    socketsUsed += 1;
+    return true;
+  };
+
+  // Count how many target stats this item contributes to that still have positive residual
+  const countGoalStatsCovered = (it, residualState) => {
+    let covered = 0;
+    for (const [stat, val] of Object.entries(it.contrib)) {
+      if ((residualState[stat] || 0) > 0 && val > 0) covered += 1;
+    }
+    return covered;
+  };
+
+  // 1) Place existing megas/supers greedily by usefulness while feasible
   while (socketsUsed < socketsCap) {
-    // Score only useful and available ones
     let best = null;
-    for (const it of zeroMerge) {
+    for (const it of existingZero) {
       if (!isAvailable(it)) continue;
-      // usefulness vs residual
+      let useful = 0;
+      for (const [stat, val] of Object.entries(it.contrib)) {
+        const need = residualWork[stat] || 0;
+        if (need > 0) useful += Math.min(val, need);
+      }
+      if (useful <= 0) continue;
+      const statsCovered = countGoalStatsCovered(it, residualWork);
+      // If sockets are getting tight, prefer items that cover at least two goal stats
+      const socketsLeft = socketsCap - (socketsUsed + 1);
+      if (socketsLeft <= Math.ceil(socketsCap / 2) && statsCovered < 2) continue;
+      const score = useful + statsCovered * 0.05;
+      if (!best || score > best.score) best = { it, score };
+    }
+    if (!best) break;
+    if (!tryPlace(best.it)) {
+      // Remove from pool if placing this instance blocks feasibility
+      const idx = existingZero.indexOf(best.it);
+      if (idx >= 0) existingZero.splice(idx, 1);
+      continue;
+    }
+    if (residualSum(residualWork) <= 1e-6) break;
+  }
+
+  // 2) Optionally place up to REGULAR_PREFILL_MAX regular L7 if they help and remain feasible
+  while (socketsUsed < socketsCap && regularUsed < REGULAR_PREFILL_MAX) {
+    let best = null;
+    for (const it of regularZero) {
+      if (!isAvailable(it)) continue;
       let useful = 0;
       for (const [stat, val] of Object.entries(it.contrib)) {
         const need = residualWork[stat] || 0;
@@ -691,25 +869,11 @@ function prefillExisting(candidates, inv, residual, socketsCap) {
       if (!best || useful > best.useful) best = { it, useful };
     }
     if (!best) break;
-
-    // Apply the best existing item
-    const it = best.it;
-    if (it.kind === 'mega-existing') {
-      const { primary, secondary, tertiary } = it.uses.mega;
-      const m = invWork.megas.find(x => x.primary === primary && x.secondary === secondary && x.tertiary === tertiary);
-      if (m) m.qty = Math.max(0, (m.qty||0) - 1);
-    } else if (it.kind === 'super-existing') {
-      const { primary, secondary } = it.uses.super;
-      const s = invWork.supers.find(x => x.primary === primary && x.secondary === secondary);
-      if (s) s.qty = Math.max(0, (s.qty||0) - 1);
-    } else if (it.kind === 'regular') {
-      const t = it.parts[0];
-      invWork.l7[t] = (invWork.l7[t] || 0) - 1;
+    if (!tryPlace(best.it)) {
+      const idx = regularZero.indexOf(best.it);
+      if (idx >= 0) regularZero.splice(idx, 1);
+      continue;
     }
-
-    residualWork = residualAfter(residualWork, it);
-    seq.push(it);
-    socketsUsed += 1;
     if (residualSum(residualWork) <= 1e-6) break;
   }
 
@@ -732,29 +896,125 @@ export function planBuild(goalsInput, inventoryInput, options = {}) {
 
   const DEFENSIVE_SOCKETS = SOCKET_LIMITS.defensive; // 12
 
-  // Prefill with existing stones to reduce residual and consume actual inventory first
-  const pre = prefillExisting(candidates, inv0, residual0, DEFENSIVE_SOCKETS);
-  let startResidual = pre.residual;
-  let startInv = pre.inv;
-  let startSocketsUsed = pre.socketsUsed;
-  const preSequence = pre.sequence;
+  // Early exact-mix attempt if inventory has no available existing supers/megas to preserve full socket budget
+  if ((options.tryExactMegaMix ?? true) && !hasAvailableCombos(inv0)) {
+    const seq = tryExactMegaMix(targets, DEFENSIVE_SOCKETS);
+    if (seq) {
+      // After exact mix, substitute crafted with existing where possible
+      const seqSub = substituteExisting(seq, inventoryInput);
+      // Build plan summary directly from exact mix sequence
+      const used = { l7: {}, supers: {}, megas: {} };
+      const mergesPlanned = [];
+      let mergesCount = 0;
+      const invLeft = cloneInv(inventoryInput || {});
+      const inc = (obj, key, delta=1) => { obj[key] = (obj[key]||0) + delta; };
+      const achieved = {};
 
-  // Optional fast path: exact mega mix for 3-4 distinct defensive goals
-  if ((options.tryExactMegaMix ?? true) && (!startInv.supers?.length && !startInv.megas?.length)) {
-    const distinctTypes = Array.from(new Set(targets.map(t => t.type)));
-    if (distinctTypes.length >= 3 && distinctTypes.length <= 4) {
-      const seq = tryExactMegaMix(targets, DEFENSIVE_SOCKETS - startSocketsUsed);
+      seqSub.forEach(item => {
+        mergesCount += item.mergesCost;
+        if (item.kind === 'regular') {
+          const t = item.parts[0];
+          inc(used.l7, t, 1); invLeft.l7[t] = (invLeft.l7[t]||0) - 1;
+        } else if (item.kind === 'super') {
+          const [a,b] = item.parts;
+          inc(used.l7, a, 1); invLeft.l7[a] = (invLeft.l7[a]||0) - 1;
+          inc(used.l7, b, 1); invLeft.l7[b] = (invLeft.l7[b]||0) - 1;
+          mergesPlanned.push({ type: 'super', primary: a, secondary: b });
+        } else if (item.kind === 'mega') {
+          const [a,b,c] = item.parts;
+          // sanity: enforce distinct types before recording
+          if (!(a === b || a === c || b === c)) {
+            inc(used.l7, a, 1); invLeft.l7[a] = (invLeft.l7[a]||0) - 1;
+            inc(used.l7, b, 1); invLeft.l7[b] = (invLeft.l7[b]||0) - 1;
+            inc(used.l7, c, 1); invLeft.l7[c] = (invLeft.l7[c]||0) - 1;
+            mergesPlanned.push({ type: 'mega', primary: a, secondary: b, tertiary: c });
+          }
+        } else if (item.kind === 'super-existing') {
+          const [a,b] = item.parts;
+          inc(used.supers, `${a}+${b}`, 1);
+          // tolerate reversed order
+          let s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+          if (!s) s = invLeft.supers.find(x => x.primary === b && x.secondary === a);
+          if (s) s.qty = Math.max(0, (s.qty||0) - 1);
+        } else if (item.kind === 'mega-existing') {
+          const [a,b,c] = item.parts;
+          inc(used.megas, `${a}+${b}+${c}`, 1);
+          // tolerate swapped secondaries for inventory decrement
+          let m = invLeft.megas.find(x => x.primary === a && x.secondary === b && x.tertiary === c);
+          if (!m) m = invLeft.megas.find(x => x.primary === a && x.secondary === c && x.tertiary === b);
+          if (m) m.qty = Math.max(0, (m.qty||0) - 1);
+        } else if (item.kind === 'upgrade-super-to-mega') {
+          const [a,b,c] = item.parts;
+          inc(used.l7, c, 1); invLeft.l7[c] = (invLeft.l7[c]||0) - 1;
+          inc(used.supers, `${a}+${b}`, 1);
+          mergesPlanned.push({ type: 'upgrade', primary: a, secondary: b, tertiary: c });
+          let s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+          if (!s) s = invLeft.supers.find(x => x.primary === b && x.secondary === a);
+          if (s) s.qty = Math.max(0, (s.qty||0) - 1);
+        }
+        for (const [stat, val] of Object.entries(item.contrib)) {
+          achieved[stat] = (achieved[stat] || 0) + val;
+        }
+      });
+
+      const missingL7 = {};
+      Object.keys(invLeft.l7 || {}).forEach(t => { if (invLeft.l7[t] < 0) missingL7[t] = -invLeft.l7[t]; });
+
+      const plan = {
+        sockets: seqSub.map(it => ({ kind: it.kind, parts: it.parts, label: it.label, contrib: it.contrib })),
+        mergesUsed: mergesCount,
+        merges: mergesPlanned,
+        usedL7: used.l7,
+        usedExistingSupers: used.supers,
+        usedExistingMegas: used.megas,
+        missingL7,
+        socketsUsed: seqSub.length,
+        socketsAvailableDef: SOCKET_LIMITS.defensive,
+        socketsAvailableOff: SOCKET_LIMITS.offensive,
+        goals: residual0,
+        achieved
+      };
+      return { success: true, plan };
+    }
+  }
+
+  // Prefill with existing stones to reduce residual and consume actual inventory first
+  let startResidual, startInv, startSocketsUsed, preSequence;
+  if (options.disablePrefill) {
+    startResidual = residual0;
+    startInv = inv0;
+    startSocketsUsed = 0;
+    preSequence = [];
+  } else {
+    const pre = prefillExisting(candidates, inv0, residual0, DEFENSIVE_SOCKETS, ubPerSocket, Array.from(new Set(targets.map(t => t.type))));
+    startResidual = pre.residual;
+    startInv = pre.inv;
+    startSocketsUsed = pre.socketsUsed;
+    preSequence = pre.sequence;
+  }
+
+  // Optional fast path: exact mega mix for 3-4 distinct defensive goals when no available combos remain after prefill
+  if ((options.tryExactMegaMix ?? true) /* && !hasAvailableCombos(startInv) */) {
+    // Build reduced targets from residual after prefill
+    const reducedTargets = Array.from(new Set(targets.map(t => t.type))).map((type) => {
+      const stat = POWER_STONES[type].defensive;
+      return { type, goal: Math.max(0, startResidual[stat] || 0) };
+    }).filter(x => x.goal > 0);
+    const distinctTypes = Array.from(new Set(reducedTargets.map(t => t.type)));
+    const socketsLeft = DEFENSIVE_SOCKETS - startSocketsUsed;
+    if (socketsLeft > 0 && distinctTypes.length >= 3 && distinctTypes.length <= 4) {
+      const seq = tryExactMegaMix(reducedTargets, socketsLeft);
       if (seq) {
-        // Build plan from prefill + exact mix sequence directly
+        const combined = [...preSequence, ...seq];
+        const seqSub = substituteExisting(combined, inventoryInput);
+        // Build plan
         const used = { l7: {}, supers: {}, megas: {} };
         const mergesPlanned = [];
         let mergesCount = 0;
         const invLeft = cloneInv(inventoryInput || {});
         const inc = (obj, key, delta=1) => { obj[key] = (obj[key]||0) + delta; };
         const achieved = {};
-
-        const allSeq = [...preSequence, ...seq];
-        allSeq.forEach(item => {
+        seqSub.forEach(item => {
           mergesCount += item.mergesCost;
           if (item.kind === 'regular') {
             const t = item.parts[0];
@@ -766,280 +1026,176 @@ export function planBuild(goalsInput, inventoryInput, options = {}) {
             mergesPlanned.push({ type: 'super', primary: a, secondary: b });
           } else if (item.kind === 'mega') {
             const [a,b,c] = item.parts;
-            inc(used.l7, a, 1); invLeft.l7[a] = (invLeft.l7[a]||0) - 1;
-            inc(used.l7, b, 1); invLeft.l7[b] = (invLeft.l7[b]||0) - 1;
-            inc(used.l7, c, 1); invLeft.l7[c] = (invLeft.l7[c]||0) - 1;
-            mergesPlanned.push({ type: 'mega', primary: a, secondary: b, tertiary: c });
+            if (!(a === b || a === c || b === c)) {
+              inc(used.l7, a, 1); invLeft.l7[a] = (invLeft.l7[a]||0) - 1;
+              inc(used.l7, b, 1); invLeft.l7[b] = (invLeft.l7[b]||0) - 1;
+              inc(used.l7, c, 1); invLeft.l7[c] = (invLeft.l7[c]||0) - 1;
+              mergesPlanned.push({ type: 'mega', primary: a, secondary: b, tertiary: c });
+            }
           } else if (item.kind === 'super-existing') {
             const [a,b] = item.parts;
             inc(used.supers, `${a}+${b}`, 1);
-            const s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+            let s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+            if (!s) s = invLeft.supers.find(x => x.primary === b && x.secondary === a);
             if (s) s.qty = Math.max(0, (s.qty||0) - 1);
           } else if (item.kind === 'mega-existing') {
             const [a,b,c] = item.parts;
             inc(used.megas, `${a}+${b}+${c}`, 1);
-            const m = invLeft.megas.find(x => x.primary === a && x.secondary === b && x.tertiary === c);
+            let m = invLeft.megas.find(x => x.primary === a && x.secondary === b && x.tertiary === c);
+            if (!m) m = invLeft.megas.find(x => x.primary === a && x.secondary === c && x.tertiary === b);
             if (m) m.qty = Math.max(0, (m.qty||0) - 1);
           } else if (item.kind === 'upgrade-super-to-mega') {
             const [a,b,c] = item.parts;
             inc(used.l7, c, 1); invLeft.l7[c] = (invLeft.l7[c]||0) - 1;
             inc(used.supers, `${a}+${b}`, 1);
             mergesPlanned.push({ type: 'upgrade', primary: a, secondary: b, tertiary: c });
-            const s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+            let s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+            if (!s) s = invLeft.supers.find(x => x.primary === b && x.secondary === a);
             if (s) s.qty = Math.max(0, (s.qty||0) - 1);
           }
           for (const [stat, val] of Object.entries(item.contrib)) {
             achieved[stat] = (achieved[stat] || 0) + val;
           }
         });
-
         const missingL7 = {};
         Object.keys(invLeft.l7 || {}).forEach(t => { if (invLeft.l7[t] < 0) missingL7[t] = -invLeft.l7[t]; });
-
         const plan = {
-          sockets: allSeq.map(it => ({ kind: it.kind, parts: it.parts, label: it.label, contrib: it.contrib })),
+          sockets: seqSub.map(it => ({ kind: it.kind, parts: it.parts, label: it.label, contrib: it.contrib })),
           mergesUsed: mergesCount,
           merges: mergesPlanned,
           usedL7: used.l7,
           usedExistingSupers: used.supers,
           usedExistingMegas: used.megas,
           missingL7,
-          socketsUsed: allSeq.length,
-          socketsAvailableDef: DEFENSIVE_SOCKETS,
+          socketsUsed: seqSub.length,
+          socketsAvailableDef: SOCKET_LIMITS.defensive,
           socketsAvailableOff: SOCKET_LIMITS.offensive,
           goals: residual0,
           achieved
         };
-        return { success: true, plan };
+        // Success if all goals met after exact mix
+        const success = Object.entries(residual0).every(([stat, goal]) => (achieved[stat] || 0) + 1e-6 >= goal) && (seqSub.length) <= DEFENSIVE_SOCKETS;
+        if (success) return { success: true, plan };
+        // else fall through to greedy
       }
     }
   }
 
-  // Helper to rank candidates against a residual
-  const orderCandidatesFor = (residual) => {
-    return candidates
-      .map(it => {
-        let useful = 0;
-        for (const [stat, val] of Object.entries(it.contrib)) {
-          useful += Math.min(val, residual[stat] || 0);
-        }
-        // Composite score: usefulness per (merges+1) with slight bias for fewer merges
-        const per = useful / (it.mergesCost + 1);
-        const bias = it.mergesCost === 0 ? 0.01 : 0;
-        return { it, useful, score: per + bias };
-      })
-      .filter(x => x.useful > 0)
-      .sort((a,b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        if (a.it.mergesCost !== b.it.mergesCost) return a.it.mergesCost - b.it.mergesCost;
-        return b.useful - a.useful;
-      });
+  // Fallback greedy planner: iteratively choose the most useful item until goals met or sockets full
+  const socketsBudget = DEFENSIVE_SOCKETS - startSocketsUsed;
+  const seqGreedy = [];
+  let residual = { ...startResidual };
+  let inv = cloneInv(startInv);
+  let socketsUsed = 0;
+  let mergesUsed = 0;
+  const maxMerges = options.maxMerges ?? Infinity;
+
+  const usefulScore = (it, res) => {
+    let useful = 0;
+    for (const [stat, val] of Object.entries(it.contrib)) {
+      const need = res[stat] || 0;
+      if (need > 0 && val > 0) useful += Math.min(val, need);
+    }
+    return useful;
   };
 
-  const runBeam = (opts, seed) => {
-    const MAX_MERGES = opts.maxMerges ?? 24;
-    const BEAM_WIDTH = opts.beamWidth ?? 16;
-    const TOP_CHILDREN = opts.topChildren ?? 10;
-    const TIME_LIMIT_MS = opts.timeLimitMs ?? 1500;
+  const currentCandidates = candidates.filter(c => c.kind !== 'regular' || (inv.l7[c.parts[0]] || 0) > 0);
 
-    const tStart = Date.now();
-    const best = { merges: Infinity, sockets: Infinity, sequence: null };
+  while (socketsUsed < socketsBudget && residualSum(residual) > 1e-6) {
+    let best = null;
+    for (const it of currentCandidates) {
+      if (!canUseItem(it, inv)) continue;
+      if (mergesUsed + it.mergesCost > maxMerges) continue;
+      const score = usefulScore(it, residual);
+      if (score <= 0) continue;
+      // Prefer higher usefulness per merge cost, tiny bias for lower merges
+      const cost = Math.max(1, it.mergesCost || 0.5);
+      const ratio = score / cost - 0.0001 * it.mergesCost;
+      if (!best || ratio > best.ratio) best = { it, ratio, score };
+    }
 
-    const makeState = (residual, inv, socketsUsed, mergesUsed, seq) => ({ residual, inv, socketsUsed, mergesUsed, seq });
-    const resSum = (res) => residualSum(res);
-
-    const seedResidual = seed?.residual ?? residual0;
-    const seedInv = seed?.inv ? cloneInv(seed.inv) : cloneInv(inv0);
-    const seedSockets = seed?.socketsUsed ?? 0;
-    const seedSeq = seed?.sequence ?? [];
-
-    let frontier = [ makeState(seedResidual, seedInv, seedSockets, 0, seedSeq) ];
-
-    for (let depth = seedSockets; depth < DEFENSIVE_SOCKETS; depth++) {
-      if (Date.now() - tStart > TIME_LIMIT_MS) break;
-
-      const next = [];
-
-      for (const state of frontier) {
-        const { residual, inv, socketsUsed, mergesUsed, seq } = state;
-
-        if (resSum(residual) <= 1e-6) {
-          if (
-            mergesUsed < best.merges ||
-            (mergesUsed === best.merges && socketsUsed < best.sockets)
-          ) {
-            best.merges = mergesUsed;
-            best.sockets = socketsUsed;
-            best.sequence = seq.slice();
-          }
-          continue;
-        }
-
-        if (!canPossiblyMeet(residual, DEFENSIVE_SOCKETS - socketsUsed, ubPerSocket)) continue;
-
-        const ordered = orderCandidatesFor(residual);
-        let children = 0;
-        let took0 = 0, took1 = 0;
-        for (const { it } of ordered) {
-          if (children >= TOP_CHILDREN) break;
-          if (mergesUsed + it.mergesCost > MAX_MERGES) continue;
-          if (!canUseItem(it, inv)) continue;
-
-          // ensure diversity by merge cost within a layer
-          if (it.mergesCost === 0 && took0 >= 4) continue;
-          if (it.mergesCost === 1 && took1 >= 4) continue;
-
-          const invCloned = cloneInv(inv);
-          applyItem(it, invCloned);
-          const nextResidual = residualAfter(residual, it);
-          const nextState = makeState(nextResidual, invCloned, socketsUsed + 1, mergesUsed + it.mergesCost, [...seq, it]);
-
-          next.push(nextState);
-          children++;
-          if (it.mergesCost === 0) took0++; else if (it.mergesCost === 1) took1++;
-
-          if (resSum(nextResidual) <= 1e-6) {
-            if (
-              nextState.mergesUsed < best.merges ||
-              (nextState.mergesUsed === best.merges && nextState.socketsUsed < best.sockets)
-            ) {
-              best.merges = nextState.mergesUsed;
-              best.sockets = nextState.socketsUsed;
-              best.sequence = nextState.seq.slice();
+    // If no candidate helps, try regular L7 of the most needed stat's type if available
+    if (!best) {
+      // pick stat with highest residual and choose any type that contributes to it
+      let topStat = null; let topNeed = 0;
+      Object.entries(residual).forEach(([stat, need]) => { if (need > topNeed) { topNeed = need; topStat = stat; } });
+      if (topNeed > 0) {
+        // Find any type that provides this stat and we have L7 for
+        const type = Object.keys(POWER_STONES).find(t => POWER_STONES[t].defensive === topStat && (inv.l7[t] || 0) > 0);
+        if (type) {
+          const reg = makeItem('regular', [type], 0, `L7 ${type}`);
+          if (mergesUsed + reg.mergesCost <= maxMerges) {
+            // Apply it directly if feasible by UB check
+            const nextRes = residualAfter(residual, reg);
+            const socketsLeft = socketsBudget - (socketsUsed + 1);
+            if (canPossiblyMeet(nextRes, socketsLeft, ubPerSocket)) {
+              applyItem(reg, inv);
+              seqGreedy.push(reg);
+              residual = nextRes;
+              socketsUsed += 1;
+              continue;
             }
           }
         }
       }
-
-      if (next.length === 0) break;
-
-      next.sort((a,b) => {
-        if (a.mergesUsed !== b.mergesUsed) return a.mergesUsed - b.mergesUsed;
-        if (a.socketsUsed !== b.socketsUsed) return a.socketsUsed - b.socketsUsed;
-        return resSum(a.residual) - resSum(b.residual);
-      });
-
-      frontier = next.slice(0, BEAM_WIDTH);
-
-      if (best.sequence && best.merges === 0) break;
+      break; // can't progress
     }
 
-    return best.sequence ? { success: true, sequence: best.sequence } : { success: false };
-  };
-
-  // Greedy fallback that always tries to complete within sockets, ignoring merges cap
-  const runGreedy = (seed) => {
-    let residual = { ...(seed?.residual ?? residual0) };
-    const seq = [ ...(seed?.sequence ?? []) ];
-    const inv = seed?.inv ? cloneInv(seed.inv) : cloneInv(inv0);
-
-    const synthRegularFor = (type) => makeItem('regular', [type], 0, `L7 ${type}`);
-
-    for (let s = (seed?.socketsUsed ?? 0); s < DEFENSIVE_SOCKETS; s++) {
-      // Build weights by residual magnitude (focus on top 3 stats)
-      const entries = Object.entries(residual).sort((a,b) => (b[1]||0) - (a[1]||0));
-      const weights = new Map();
-      entries.forEach(([stat, val], idx) => {
-        if ((val||0) <= 0) return;
-        weights.set(stat, idx === 0 ? 1.0 : idx === 1 ? 0.8 : idx === 2 ? 0.6 : 0.25);
-      });
-
-      let best = null;
-
-      // Score all candidates against weighted residuals
-      for (const it of candidates) {
-        if (!canUseItem(it, inv)) continue;
-        let useful = 0;
-        let statsCovered = 0;
-        for (const [stat, val] of Object.entries(it.contrib)) {
-          const need = residual[stat] || 0;
-          if (need <= 0) continue;
-          const take = Math.min(val, need);
-          if (take > 0) {
-            const w = weights.get(stat) || 0.2;
-            useful += take * w;
-            statsCovered += 1;
-          }
-        }
-        if (useful <= 0) continue;
-        // Favor broader coverage then tiny penalty for merges cost
-        const score = useful + statsCovered * 0.02 - it.mergesCost * 0.001;
-        if (!best || score > best.score) best = { it, score };
-      }
-
-      if (!best) {
-        // As a safety net, synthesize a regular L7 for the highest residual stat's type
-        const top = entries.find(([, v]) => (v||0) > 0);
-        if (!top) break; // nothing left
-        const topStat = top[0];
-        // Find a type that contributes to this stat
-        const typeForTop = Object.keys(POWER_STONES).find(t => POWER_STONES[t].defensive === topStat);
-        if (!typeForTop) break;
-        const it = synthRegularFor(typeForTop);
-        applyItem(it, inv);
-        residual = residualAfter(residual, it);
-        seq.push(it);
-        if (residualSum(residual) <= 1e-6) break;
-        continue;
-      }
-
-      applyItem(best.it, inv);
-      residual = residualAfter(residual, best.it);
-      seq.push(best.it);
-      if (residualSum(residual) <= 1e-6) break;
+    const pick = best.it;
+    const nextRes = residualAfter(residual, pick);
+    const socketsLeft = socketsBudget - (socketsUsed + 1);
+    if (!canPossiblyMeet(nextRes, socketsLeft, ubPerSocket)) {
+      // skip this item by removing temporarily from pool for this iteration
+      // Mark as not selectable by setting a flag
+      currentCandidates.splice(currentCandidates.indexOf(pick), 1);
+      continue;
     }
 
-    if (residualSum(residual) > 1e-6) return { success: false };
-    return { success: true, sequence: seq };
-  };
+    // Apply
+    applyItem(pick, inv);
+    seqGreedy.push(pick);
+    residual = nextRes;
+    socketsUsed += 1;
+    mergesUsed += pick.mergesCost;
+  }
 
-  // Try user-tuned beam first
-  const primary = runBeam({
-    maxMerges: options.maxMerges ?? 24,
-    beamWidth: options.beamWidth ?? 16,
-    topChildren: options.topChildren ?? 10,
-    timeLimitMs: options.timeLimitMs ?? 1500
-  }, { residual: startResidual, inv: startInv, socketsUsed: startSocketsUsed, sequence: preSequence });
+  const fullSeq = [...preSequence, ...seqGreedy];
 
-  let sequence = null;
+  // Validate achievement
+  const achieved = {};
+  fullSeq.forEach(it => { for (const [stat, val] of Object.entries(it.contrib)) achieved[stat] = (achieved[stat]||0) + val; });
+  const unmet = Object.entries(residual0).filter(([stat, goal]) => (achieved[stat]||0) + 1e-6 < goal);
 
-  if (primary.success) {
-    sequence = primary.sequence;
-  } else {
-    // Relaxed attempt
-    const relaxed = runBeam({ maxMerges: Math.max(48, options.maxMerges ?? 24), beamWidth: 24, topChildren: 14, timeLimitMs: 2200 }, { residual: startResidual, inv: startInv, socketsUsed: startSocketsUsed, sequence: preSequence });
-    if (relaxed.success) {
-      sequence = relaxed.sequence;
-    } else {
-      // Final greedy fallback
-      const greedy = runGreedy({ residual: startResidual, inv: startInv, socketsUsed: startSocketsUsed, sequence: preSequence });
-      if (greedy.success) {
-        sequence = greedy.sequence;
-      } else {
-        // If even greedy can't fill within sockets, then it's truly infeasible under socket maxima
-        if (!canPossiblyMeet(residual0, DEFENSIVE_SOCKETS, ubPerSocket)) {
-          return { success: false, reason: 'Goals unattainable under the 12 defensive sockets maximum given per-socket caps. Lower goals or reconsider target mix.', plan: null };
-        }
-        return { success: false, reason: 'No feasible plan found within limits (search/timeout). Try again or adjust constraints.', plan: null };
+  // If greedy missed, try a last resort: fill remaining sockets with megas focusing on top 3-4 types
+  if (unmet.length > 0 && startSocketsUsed + fullSeq.length < DEFENSIVE_SOCKETS) {
+    const socketsLeft = DEFENSIVE_SOCKETS - (startSocketsUsed + fullSeq.length);
+    const neededTypes = Array.from(new Set(Object.keys(residual).filter(stat => (residual[stat]||0) > 0).map(stat => {
+        return Object.keys(POWER_STONES).find(x => POWER_STONES[x].defensive === stat);
+    }).filter(Boolean)));
+    if (neededTypes.length >= 3 && neededTypes.length <= 4) {
+      const reduced = neededTypes.map(type => ({ type, goal: Math.max(0, residual[POWER_STONES[type].defensive] || 0) }));
+      const seq = tryExactMegaMix(reduced, socketsLeft);
+      if (seq) {
+        seq.forEach(it => fullSeq.push(it));
       }
     }
   }
 
-  // Build plan summary from sequence
+  // Substitute with existing combos where possible to reduce merges
+  const seqSub = substituteExisting(fullSeq, inventoryInput);
+
+  // Compute final plan summary
   const used = { l7: {}, supers: {}, megas: {} };
   const mergesPlanned = [];
   let mergesCount = 0;
-
   const invLeft = cloneInv(inventoryInput || {});
   const inc = (obj, key, delta=1) => { obj[key] = (obj[key]||0) + delta; };
-
-  sequence.forEach(item => {
+  const achievedFinal = {};
+  seqSub.forEach(item => {
     mergesCount += item.mergesCost;
-
     if (item.kind === 'regular') {
       const t = item.parts[0];
-      inc(used.l7, t, 1);
-      invLeft.l7[t] = (invLeft.l7[t]||0) - 1;
+      inc(used.l7, t, 1); invLeft.l7[t] = (invLeft.l7[t]||0) - 1;
     } else if (item.kind === 'super') {
       const [a,b] = item.parts;
       inc(used.l7, a, 1); invLeft.l7[a] = (invLeft.l7[a]||0) - 1;
@@ -1047,56 +1203,60 @@ export function planBuild(goalsInput, inventoryInput, options = {}) {
       mergesPlanned.push({ type: 'super', primary: a, secondary: b });
     } else if (item.kind === 'mega') {
       const [a,b,c] = item.parts;
-      inc(used.l7, a, 1); invLeft.l7[a] = (invLeft.l7[a]||0) - 1;
-      inc(used.l7, b, 1); invLeft.l7[b] = (invLeft.l7[b]||0) - 1;
-      inc(used.l7, c, 1); invLeft.l7[c] = (invLeft.l7[c]||0) - 1;
-      mergesPlanned.push({ type: 'mega', primary: a, secondary: b, tertiary: c });
+      if (!(a === b || a === c || b === c)) {
+        inc(used.l7, a, 1); invLeft.l7[a] = (invLeft.l7[a]||0) - 1;
+        inc(used.l7, b, 1); invLeft.l7[b] = (invLeft.l7[b]||0) - 1;
+        inc(used.l7, c, 1); invLeft.l7[c] = (invLeft.l7[c]||0) - 1;
+        mergesPlanned.push({ type: 'mega', primary: a, secondary: b, tertiary: c });
+      }
     } else if (item.kind === 'super-existing') {
       const [a,b] = item.parts;
       inc(used.supers, `${a}+${b}`, 1);
-      const s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+      let s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+      if (!s) s = invLeft.supers.find(x => x.primary === b && x.secondary === a);
       if (s) s.qty = Math.max(0, (s.qty||0) - 1);
     } else if (item.kind === 'mega-existing') {
       const [a,b,c] = item.parts;
       inc(used.megas, `${a}+${b}+${c}`, 1);
-      const m = invLeft.megas.find(x => x.primary === a && x.secondary === b && x.tertiary === c);
+      let m = invLeft.megas.find(x => x.primary === a && x.secondary === b && x.tertiary === c);
+      if (!m) m = invLeft.megas.find(x => x.primary === a && x.secondary === c && x.tertiary === b);
       if (m) m.qty = Math.max(0, (m.qty||0) - 1);
     } else if (item.kind === 'upgrade-super-to-mega') {
       const [a,b,c] = item.parts;
       inc(used.l7, c, 1); invLeft.l7[c] = (invLeft.l7[c]||0) - 1;
       inc(used.supers, `${a}+${b}`, 1);
       mergesPlanned.push({ type: 'upgrade', primary: a, secondary: b, tertiary: c });
-      const s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+      let s = invLeft.supers.find(x => x.primary === a && x.secondary === b);
+      if (!s) s = invLeft.supers.find(x => x.primary === b && x.secondary === a);
       if (s) s.qty = Math.max(0, (s.qty||0) - 1);
+    }
+    for (const [stat, val] of Object.entries(item.contrib)) {
+      achievedFinal[stat] = (achievedFinal[stat] || 0) + val;
     }
   });
 
   const missingL7 = {};
-  Object.keys(invLeft.l7 || {}).forEach(t => {
-    if (invLeft.l7[t] < 0) missingL7[t] = -invLeft.l7[t];
-  });
-
-  const achieved = {};
-  sequence.forEach(item => {
-    for (const [stat, val] of Object.entries(item.contrib)) {
-      achieved[stat] = (achieved[stat] || 0) + val;
-    }
-  });
+  Object.keys(invLeft.l7 || {}).forEach(t => { if (invLeft.l7[t] < 0) missingL7[t] = -invLeft.l7[t]; });
 
   const plan = {
-    sockets: sequence.map(it => ({ kind: it.kind, parts: it.parts, label: it.label, contrib: it.contrib })),
+    sockets: seqSub.map(it => ({ kind: it.kind, parts: it.parts, label: it.label, contrib: it.contrib })),
     mergesUsed: mergesCount,
     merges: mergesPlanned,
     usedL7: used.l7,
     usedExistingSupers: used.supers,
     usedExistingMegas: used.megas,
     missingL7,
-    socketsUsed: sequence.length,
-    socketsAvailableDef: DEFENSIVE_SOCKETS,
+    socketsUsed: seqSub.length,
+    socketsAvailableDef: SOCKET_LIMITS.defensive,
     socketsAvailableOff: SOCKET_LIMITS.offensive,
     goals: residual0,
-    achieved
+    achieved: achievedFinal
   };
 
+  // Success if all goals met and sockets not exceeded
+  const success = Object.entries(residual0).every(([stat, goal]) => (achievedFinal[stat] || 0) + 1e-6 >= goal) && (seqSub.length) <= DEFENSIVE_SOCKETS;
+  if (!success) {
+    return { success: false, reason: 'Goals not fully met within socket or merge limits', plan };
+  }
   return { success: true, plan };
 }
